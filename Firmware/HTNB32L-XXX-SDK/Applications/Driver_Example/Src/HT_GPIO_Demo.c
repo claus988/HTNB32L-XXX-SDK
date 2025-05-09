@@ -1,17 +1,4 @@
-/**
- *
- * Copyright (c) 2023 HT Micron Semicondutores S.A.
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- * http://www.apache.org/licenses/LICENSE-2.0
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
- */
+
 
 #include "HT_GPIO_Demo.h"
 
@@ -64,7 +51,7 @@ static void HT_GPIO_Callback(void) {
   HT_GPIO_RestoreIRQMask(BUTTON_INSTANCE, portIrqMask);
 }
 
-static void HT_GPIO_InitButton(void) {
+static void HT_GPIO_InitButton(void) { //CONFIGURA AS ENTRADAS
   GPIO_InitType GPIO_InitStruct = {0};
 
   GPIO_InitStruct.af = PAD_MuxAlt0;
@@ -74,7 +61,7 @@ static void HT_GPIO_InitButton(void) {
   GPIO_InitStruct.pull = PAD_InternalPullUp;
   GPIO_InitStruct.instance = BUTTON_INSTANCE;
   GPIO_InitStruct.exti = GPIO_EXTI_ENABLE;
-  GPIO_InitStruct.interrupt_config = GPIO_InterruptFallingEdge;
+  GPIO_InitStruct.interrupt_config =  GPIO_InterruptRisingEdge;
 
   HT_GPIO_Init(&GPIO_InitStruct);
 
@@ -90,7 +77,7 @@ static void HT_GPIO_InitLed(void) {
   GPIO_InitStruct.pad_id = LED_PAD_ID;
   GPIO_InitStruct.gpio_pin = LED_GPIO_PIN;
   GPIO_InitStruct.pin_direction = GPIO_DirectionOutput;
-  GPIO_InitStruct.init_output = 0;
+  GPIO_InitStruct.init_output = 1;
   GPIO_InitStruct.pull = PAD_AutoPull;
   GPIO_InitStruct.instance = LED_INSTANCE;
   GPIO_InitStruct.exti = GPIO_EXTI_DISABLED;
@@ -110,9 +97,9 @@ void HT_GPIO_App(void) {
   while(1) {
 
       if (gpio_exti)
-        HT_GPIO_WritePin(LED_GPIO_PIN, LED_INSTANCE, LED_ON);
-      else
         HT_GPIO_WritePin(LED_GPIO_PIN, LED_INSTANCE, LED_OFF);
+      else
+        HT_GPIO_WritePin(LED_GPIO_PIN, LED_INSTANCE, LED_ON);
       
   }
 }

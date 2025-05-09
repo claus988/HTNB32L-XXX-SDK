@@ -1,4 +1,3 @@
-
 /**
  *
  * Copyright (c) 2024 HT Micron Semicondutores S.A.
@@ -14,48 +13,83 @@
  *
  */
 
-#include "HT_USART_Demo.h"
-
-extern USART_HandleTypeDef huart1;
-static uint8_t rx_buffer[USART_BUFFER_SIZE] = {0};
-
-volatile uint8_t rx_callback = 0;
-volatile uint8_t tx_callback = 0;
-
-extern uint8_t *usart_tx_buffer;
-extern uint8_t *usart_rx_buffer;
-extern uint32_t usart_tx_buffer_size;
-extern uint32_t usart_rx_buffer_size;
-
-void HT_USART_Callback(uint32_t event) {
-    if(event & ARM_USART_EVENT_RECEIVE_COMPLETE)
-        rx_callback = 1;
+ #include "HT_USART_Demo.h"
+ #include "htnb32lxxx_hal_usart.h"
+ 
+ extern USART_HandleTypeDef huart1;
+ extern USART_HandleTypeDef huart2;
+ 
+ static uint8_t rx_buffer_usart_1;
+ static uint8_t rx_buffer_usart_2;
+ // static uint8_t tx_buffer[50] = {0};
+ char cmdRxBuffer[255] = {0};
+ int cmdRxBufferIdx = 0;
+ 
+ volatile uint8_t rx_callback_usart_1 = 0;
+ volatile uint8_t tx_callback_usart_1 = 0;
+ volatile uint8_t rx_callback_usart_2 = 0;
+ volatile uint8_t tx_callback_usart_2 = 0;
+ 
+ extern uint8_t *usart_tx_buffer;
+ extern uint8_t *usart_rx_buffer;
+ extern uint32_t usart_tx_buffer_size;
+ extern uint32_t usart_rx_buffer_size;
+ uint32_t uart_cntrl = (ARM_USART_MODE_ASYNCHRONOUS | ARM_USART_DATA_BITS_8 | ARM_USART_PARITY_NONE | 
+     ARM_USART_STOP_BITS_1 | ARM_USART_FLOW_CONTROL_NONE);
+ 
+ 
+ void HT_USART_Callback(uint32_t event) {
+     rx_callback_usart_1 = 1;
+ }
+ void HT_USART_Callback_2(uint32_t event) {
+     rx_callback_usart_2 = 1;
+ }
+ 
+ void HT_USART_App(void) {
+     HAL_USART_Initialize(HT_USART_Callback_2, &huart2);
+     HAL_USART_PowerControl(ARM_POWER_FULL, &huart2);
+     HAL_USART_Control(uart_cntrl, 115200, &huart2);
+     ht_printf("HTNB32L-XXX USART Example\n");
+     
+     while(1) {
+        HAL_USART_ReceivePolling(&huart1, &rx_buffer_usart_1, 1);
     
-    if(event & ARM_USART_EVENT_TX_COMPLETE)
-        tx_callback = 1;
-}
+        if (rx_buffer_usart_1 != 0) {
+            cmdRxBuffer[cmdRxBufferIdx] = rx_buffer_usart_1;
+            cmdRxBufferIdx++;
+            
+            // Verifica se recebeu um '\r' (fim de comando)
+            if (rx_buffer_usart_1 == '\r') {
+                // Adiciona terminador de string
+                cmdRxBuffer[cmdRxBufferIdx - 1] = '\0'; // Remove o '\r'
+                
+                ht_printf("Recebeu: %s\n", (char *)cmdRxBuffer);
+                
+                // Verifica se é "bola"
+                if (strcmp((char *)cmdRxBuffer, "AT") == 0) {
+                    const char *response = "OK\r";
+                    HAL_USART_SendPolling(&huart1, (uint8_t *)response, strlen(response));
+                    ht_printf("\n");
+                    ht_printf("%c", rx_buffer_usart_1);
+                } else {
+                    const char *response = "ERRO\r";
+                    HAL_USART_SendPolling(&huart1, (uint8_t *)response, strlen(response));
+                    ht_printf("\n");
+                    ht_printf("%c", rx_buffer_usart_1);
+                    ht_printf("SAINDO");
+                    break;
 
-void HT_USART_App(void) {
-
-    ht_printf("HTNB32L-XXX USART Example\n");
-    
-    while(1) {
-
-        HAL_USART_IRQnEnable(&huart1, (USART_IER_RX_DATA_REQ_Msk | USART_IER_RX_TIMEOUT_Msk | USART_IER_RX_LINE_STATUS_Msk));
-        HAL_USART_Receive_IT(rx_buffer, USART_BUFFER_SIZE-1);
-        ht_printf("Waiting for usart rx data...\n");
-
-        while(!rx_callback);
-        rx_callback = 0;
-        
-        ht_printf("Received: %s\n, ", (char *)rx_buffer);
-
-        memset(rx_buffer, 0, sizeof(rx_buffer));
-
-        HAL_USART_IRQnDisable(&huart1, (USART_IER_RX_DATA_REQ_Msk | USART_IER_RX_TIMEOUT_Msk | USART_IER_RX_LINE_STATUS_Msk));
-
+                }
+                
+                // Limpa buffer
+                memset(cmdRxBuffer, 0, sizeof(cmdRxBuffer));
+                cmdRxBufferIdx = 0;
+            }
+            
+            rx_buffer_usart_1 = 0;
+        }
     }
-    
-}
-
-/************************ HT Micron Semicondutores S.A *****END OF FILE****/
+     
+ }
+ 
+ /************************ HT Micron Semicondutores S.A *****END OF FILE****/
