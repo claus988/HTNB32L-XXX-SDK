@@ -1,16 +1,12 @@
 #include "main.h"
 #include "FreeRTOS.h"
 #include "task.h"
+#include "queue.h"
 #include "slpman_qcx212.h"
 #include "pad_qcx212.h"
 #include "HT_gpio_qcx212.h"
 #include "ic_qcx212.h"
 #include "HT_ic_qcx212.h"
-
-static uint32_t uart_cntrl = (ARM_USART_MODE_ASYNCHRONOUS | ARM_USART_DATA_BITS_8 | ARM_USART_PARITY_NONE | 
-                                ARM_USART_STOP_BITS_1 | ARM_USART_FLOW_CONTROL_NONE);
-
-extern USART_HandleTypeDef huart1;
 
 //GPIO10 - BUTTON
 #define BUTTON_INSTANCE          0                  /**</ Button pin instance. */
@@ -27,7 +23,7 @@ extern USART_HandleTypeDef huart1;
 #define LED_ON  1                                   /**</ LED on. */
 #define LED_OFF 0                                   /**</ LED off. */
 
-volatile bool button_state = false;
+QueueHandle_t xButtonQueue;  // Fila para comunicação entre tarefas
 
 static void HT_GPIO_InitButton(void) {
   GPIO_InitType GPIO_InitStruct = {0};
@@ -60,43 +56,54 @@ static void HT_GPIO_InitLed(void) {
 }
 
 void Task1(void *pvParameters) {
+    int button_value = 0;
+    int button_value_last = 0;
     while (1) {
-        button_state = (bool) HT_GPIO_PinRead(BUTTON_INSTANCE, BUTTON_PIN);
-        vTaskDelay(pdMS_TO_TICKS(50));
-        printf("button state: %d", button_state);
+        button_value = HT_GPIO_PinRead(BUTTON_INSTANCE, BUTTON_PIN);
+        if(button_value != button_value_last) {
+            xQueueSend(xButtonQueue, &button_value, portMAX_DELAY);
+            button_value_last = button_value;
+            printf("button_value = %d\n", button_value);
+        }
+        // vTaskDelay(pdMS_TO_TICKS(10));
     }
 }
 
 void Task2(void *pvParameters) {
-    while (1)
-    {   
-        HT_GPIO_WritePin(LED_GPIO_PIN, LED_INSTANCE, button_state);
-        vTaskDelay(pdMS_TO_TICKS(50));
+    int received_value;
+    while (1) {
+        if(xQueueReceive(xButtonQueue, &received_value, portMAX_DELAY) == pdPASS) {
+            HT_GPIO_WritePin(LED_GPIO_PIN, LED_INSTANCE, received_value);
+        }
+        vTaskDelay(pdMS_TO_TICKS(500));
     }
 }
 
-/**
-  \fn          int main_entry(void)
-  \brief       main entry function.
-  \return
-*/
 void main_entry(void) {
     HT_GPIO_InitButton();
     HT_GPIO_InitLed();
     slpManNormalIOVoltSet(IOVOLT_3_30V);
 
+    // Inicializa UART (se necessário no seu projeto)
+    #ifdef USE_USART_DEBUG
+    extern USART_HandleTypeDef huart1;
+    static uint32_t uart_cntrl = (ARM_USART_MODE_ASYNCHRONOUS | ARM_USART_DATA_BITS_8 | 
+                                 ARM_USART_PARITY_NONE | ARM_USART_STOP_BITS_1);
     HAL_USART_InitPrint(&huart1, GPR_UART1ClkSel_26M, uart_cntrl, 115200);
-    printf("Exemplo FreeRTOS\n");
+    printf("Sistema iniciado\n");
+    #endif
 
-    xTaskCreate(Task1, "Blink", 128, NULL, 1, NULL);
-    xTaskCreate(Task2, "Print", 128, NULL, 1, NULL);
+    // Cria a fila para 10 elementos do tipo int
+    xButtonQueue = xQueueCreate(10, sizeof(int));
+    if(xButtonQueue == NULL) {
+        printf("Erro ao criar a fila\n");
+        while(1);
+    }
+
+    xTaskCreate(Task1, "LeBotao", 128, NULL, 1, NULL);
+    xTaskCreate(Task2, "ControleLED", 128, NULL, 1, NULL);
 
     vTaskStartScheduler();
-    
-    printf("Nao deve chegar aqui.\n");
 
     while(1);
-
 }
-
-/******** HT Micron Semicondutores S.A **END OF FILE*/
