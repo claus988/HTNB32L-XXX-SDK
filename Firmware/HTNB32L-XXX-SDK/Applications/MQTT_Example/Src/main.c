@@ -1,81 +1,78 @@
 #include "main.h"
 #include "FreeRTOS.h"
 #include "task.h"
-#include "queue.h"
+#include "semphr.h"
 #include "slpman_qcx212.h"
 #include "pad_qcx212.h"
 #include "HT_gpio_qcx212.h"
 #include "ic_qcx212.h"
 #include "HT_ic_qcx212.h"
 
-//GPIO10 - BUTTON
-#define BUTTON_INSTANCE          0                  /**</ Button pin instance. */
-#define BUTTON_PIN               10                 /**</ Button pin number. */
-#define BUTTON_PAD_ID            25                 /**</ Button Pad ID. */
-#define BUTTON_PAD_ALT_FUNC      PAD_MuxAlt0        /**</ Button pin alternate function. */
+// Configurações do Hardware
+#define BUTTON_INSTANCE          0
+#define BUTTON_PIN               10
+#define BUTTON_PAD_ID            25
+#define BUTTON_PAD_ALT_FUNC      PAD_MuxAlt0
 
-//GPIO3 - LED
-#define LED_INSTANCE             0                  /**</ LED pin instance. */
-#define LED_GPIO_PIN             3                  /**</ LED pin number. */
-#define LED_PAD_ID               14                 /**</ LED Pad ID. */
-#define LED_PAD_ALT_FUNC         PAD_MuxAlt0        /**</ LED pin alternate function. */
+#define LED_INSTANCE             0
+#define LED_GPIO_PIN             3
+#define LED_PAD_ID               14
+#define LED_PAD_ALT_FUNC         PAD_MuxAlt0
 
-#define LED_ON  1                                   /**</ LED on. */
-#define LED_OFF 0                                   /**</ LED off. */
+// Parâmetros do Sistema
+#define DEBOUNCE_DELAY_MS       50   // Debounce de 50ms
+#define POLLING_DELAY_MS        10   // Polling a cada 10ms
+#define PRIORIDADE_TASKS        1    // Prioridade igual para ambas tasks
 
-QueueHandle_t xButtonQueue;  // Fila para comunicação entre tarefas
+SemaphoreHandle_t xSemaforo;         // Semáforo binário
 
 static void HT_GPIO_InitButton(void) {
-  GPIO_InitType GPIO_InitStruct = {0};
-
-  GPIO_InitStruct.af = PAD_MuxAlt0;
-  GPIO_InitStruct.pad_id = BUTTON_PAD_ID;
-  GPIO_InitStruct.gpio_pin = BUTTON_PIN;
-  GPIO_InitStruct.pin_direction = GPIO_DirectionInput;
-  GPIO_InitStruct.pull = PAD_InternalPullUp;
-  GPIO_InitStruct.instance = BUTTON_INSTANCE;
-  GPIO_InitStruct.exti = GPIO_EXTI_DISABLED;
-  GPIO_InitStruct.interrupt_config = GPIO_InterruptFallingEdge;
-
-  HT_GPIO_Init(&GPIO_InitStruct);
+    GPIO_InitType GPIO_InitStruct = {0};
+    GPIO_InitStruct.af = BUTTON_PAD_ALT_FUNC;
+    GPIO_InitStruct.pad_id = BUTTON_PAD_ID;
+    GPIO_InitStruct.gpio_pin = BUTTON_PIN;
+    GPIO_InitStruct.pin_direction = GPIO_DirectionInput;
+    GPIO_InitStruct.pull = PAD_InternalPullUp;
+    GPIO_InitStruct.instance = BUTTON_INSTANCE;
+    GPIO_InitStruct.exti = GPIO_EXTI_DISABLED;
+    GPIO_InitStruct.interrupt_config = GPIO_InterruptFallingEdge;
+    HT_GPIO_Init(&GPIO_InitStruct);
 }
 
 static void HT_GPIO_InitLed(void) {
-  GPIO_InitType GPIO_InitStruct = {0};
-
-  GPIO_InitStruct.af = PAD_MuxAlt0;
-  GPIO_InitStruct.pad_id = LED_PAD_ID;
-  GPIO_InitStruct.gpio_pin = LED_GPIO_PIN;
-  GPIO_InitStruct.pin_direction = GPIO_DirectionOutput;
-  GPIO_InitStruct.init_output = 0;
-  GPIO_InitStruct.pull = PAD_AutoPull;
-  GPIO_InitStruct.instance = LED_INSTANCE;
-  GPIO_InitStruct.exti = GPIO_EXTI_DISABLED;
-
-  HT_GPIO_Init(&GPIO_InitStruct);
+    GPIO_InitType GPIO_InitStruct = {0};
+    GPIO_InitStruct.af = LED_PAD_ALT_FUNC;
+    GPIO_InitStruct.pad_id = LED_PAD_ID;
+    GPIO_InitStruct.gpio_pin = LED_GPIO_PIN;
+    GPIO_InitStruct.pin_direction = GPIO_DirectionOutput;
+    GPIO_InitStruct.init_output = 0;
+    GPIO_InitStruct.pull = PAD_AutoPull;
+    GPIO_InitStruct.instance = LED_INSTANCE;
+    GPIO_InitStruct.exti = GPIO_EXTI_DISABLED;
+    HT_GPIO_Init(&GPIO_InitStruct);
 }
 
 void Task1(void *pvParameters) {
-    int button_value = 0;
-    int button_value_last = 0;
-    while (1) {
+    int button_value, last_value = 0;
+    while(1) {
         button_value = HT_GPIO_PinRead(BUTTON_INSTANCE, BUTTON_PIN);
-        if(button_value != button_value_last) {
-            xQueueSend(xButtonQueue, &button_value, portMAX_DELAY);
-            button_value_last = button_value;
-            printf("button_value = %d\n", button_value);
+        if (button_value != last_value) {
+            xSemaphoreGive(xSemaforo); // Libera o semáforo
+            last_value = button_value;
+            printf("Botão: %d\n", button_value);
+            vTaskDelay(pdMS_TO_TICKS(DEBOUNCE_DELAY_MS)); // Debounce
         }
-        // vTaskDelay(pdMS_TO_TICKS(10));
+        vTaskDelay(pdMS_TO_TICKS(POLLING_DELAY_MS)); // Polling
     }
 }
 
 void Task2(void *pvParameters) {
-    int received_value;
-    while (1) {
-        if(xQueueReceive(xButtonQueue, &received_value, portMAX_DELAY) == pdPASS) {
-            HT_GPIO_WritePin(LED_GPIO_PIN, LED_INSTANCE, received_value);
+    while(1) {
+        if (xSemaphoreTake(xSemaforo, portMAX_DELAY) == pdTRUE) {
+            int estado = HT_GPIO_PinRead(BUTTON_INSTANCE, BUTTON_PIN);
+            HT_GPIO_WritePin(LED_GPIO_PIN, LED_INSTANCE, estado);
+            printf("LED: %d\n", estado);
         }
-        vTaskDelay(pdMS_TO_TICKS(500));
     }
 }
 
@@ -84,24 +81,20 @@ void main_entry(void) {
     HT_GPIO_InitLed();
     slpManNormalIOVoltSet(IOVOLT_3_30V);
 
-    // Inicializa UART (se necessário no seu projeto)
     #ifdef USE_USART_DEBUG
-    extern USART_HandleTypeDef huart1;
-    static uint32_t uart_cntrl = (ARM_USART_MODE_ASYNCHRONOUS | ARM_USART_DATA_BITS_8 | 
-                                 ARM_USART_PARITY_NONE | ARM_USART_STOP_BITS_1);
-    HAL_USART_InitPrint(&huart1, GPR_UART1ClkSel_26M, uart_cntrl, 115200);
-    printf("Sistema iniciado\n");
+    printf("Sistema Iniciado\n");
     #endif
 
-    // Cria a fila para 10 elementos do tipo int
-    xButtonQueue = xQueueCreate(10, sizeof(int));
-    if(xButtonQueue == NULL) {
-        printf("Erro ao criar a fila\n");
+    // Cria semáforo binário
+    xSemaforo = xSemaphoreCreateBinary();
+    if (xSemaforo == NULL) {
+        printf("Erro ao criar semáforo!\n");
         while(1);
     }
 
-    xTaskCreate(Task1, "LeBotao", 128, NULL, 1, NULL);
-    xTaskCreate(Task2, "ControleLED", 128, NULL, 1, NULL);
+    // Cria tasks com mesma prioridade
+    xTaskCreate(Task1, "TaskBotao", 128, NULL, PRIORIDADE_TASKS, NULL);
+    xTaskCreate(Task2, "TaskLED", 128, NULL, PRIORIDADE_TASKS, NULL);
 
     vTaskStartScheduler();
 
