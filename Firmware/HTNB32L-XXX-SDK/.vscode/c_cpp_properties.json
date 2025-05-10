@@ -22,7 +22,8 @@
                 "${workspaceFolder}/SDK/PLAT/driver/chip/qcx212/inc",
                 "${workspaceFolder}/SDK/PLAT/device/target/board/common/ARMCM3/inc",
                 "${workspaceFolder}/SDK/PLAT/driver/board/qcx212_0h00/inc",
-                "${workspaceFolder}/SDK/PLAT/os/freertos/inc"
+                "${workspaceFolder}/SDK/PLAT/os/freertos/inc",
+                "${workspaceFolder}/SDK/PLAT/middleware/developed/debug/inc"
             ],
             "defines": [
                 "DEBUG"
