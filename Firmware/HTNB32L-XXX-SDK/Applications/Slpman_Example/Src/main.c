@@ -14,6 +14,10 @@
  */
 
 #include "main.h"
+// #include "htnb32lxxx_hal_usart.h"
+
+
+
 
 /* Function prototypes  ------------------------------------------------------------------*/
 
@@ -233,7 +237,9 @@ static void HT_UserAppTask(void *arg) {
     slpManRegisterUsrdefinedRestoreCb(HT_AfterSlp2Callback,NULL,SLPMAN_SLEEP2_STATE);
 
     slpstate = slpManGetLastSlpState();
+    // slpstate = SLP_SLP2_STATE;
     wkpSrc = slpManGetWakeupSrc();
+    printf("wkpSrc: %d\n", wkpSrc);
 
     if((slpstate == SLP_SLP2_STATE) || (slpstate == SLP_HIB_STATE)) {    // wakeup from sleep 
 		HT_FsRead();
@@ -331,6 +337,11 @@ static void HT_AppInit(void *arg) {
 }
 
 void main_entry(void) {
+
+
+    HAL_USART_InitPrint(&huart1, GPR_UART1ClkSel_26M, uart_cntrl, 115200);
+
+    // slpManWakeSwake_uprc_e wake_up = slpManGetWakeupSrc();
 
     BSP_CommonInit();
     osKernelInitialize();

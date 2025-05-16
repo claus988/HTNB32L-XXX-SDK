@@ -67,7 +67,7 @@
 #define USE_AON_PIN 0
 
 /* RTC enable preprocessor */
-#define USE_DEEP_SLEEP_TIMER 0
+#define USE_DEEP_SLEEP_TIMER 1
 
 /* Typedefs  ------------------------------------------------------------------*/
 
@@ -81,6 +81,8 @@ typedef enum {
     EXAMPLE_STEP_3,
     EXAMPLE_STEP_4
 } FSM_State;
+
+
 
 #endif /*__MAIN_H__*/
 
